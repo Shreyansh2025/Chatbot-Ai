@@ -46,15 +46,25 @@ app.post('/api/save-prompt', async (req, res) => {
 });
 
 // Route: Get history for a specific user
+// Make sure your Model is imported!
+// const Chat = require("./models/Chat"); // or wherever your schema is
+
+// Route: Get history for a specific user
 app.get('/api/history', async (req, res) => {
   try {
-    const { userId } = req.query; // Extracts ?userId=... from the URL
-    if (!userId) return res.status(400).json({ error: "User ID is required" });
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
 
-    const userHistory = await Chat.find({ userId }).sort({ createdAt: -1 });
-    res.json(userHistory);
+    // ✅ CHANGE THIS: Use 'Prompt' (your model name) instead of 'Chat'
+    const userHistory = await Prompt.find({ userId }).sort({ createdAt: -1 });
+    
+    res.status(200).json(userHistory);
   } catch (error) {
-    res.status(500).json({ error: "Server error fetching history" });
+    console.error("Backend Error:", error); 
+    res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
 });
 // Route: Delete all history for a specific user
