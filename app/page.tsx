@@ -27,7 +27,7 @@ export default function Home() {
     setIsHistoryLoading(true);
     try {
       const res = await fetch(
-        `http://localhost:5000/api/history?userId=${user.id}`,
+        `https://chatbot-ai-2kjk.onrender.com/api/history?userId=${user.id}`,
       );
       const data = await res.json();
       setHistory(data);
