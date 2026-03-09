@@ -94,9 +94,13 @@ export default function Home() {
 
     try {
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY as string;
+      if (!apiKey) {
+      setResponse("API Key is missing. Check your Vercel/Local environment variables.");
+      setIsLoading(false);
+      return;
+    }
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-.5-flash" });
-
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       const result = await model.generateContent(currentPrompt);
       const text = result.response.text();
 
@@ -118,12 +122,22 @@ export default function Home() {
       } catch (dbError) {
         console.error("Warning: Could not save to database.", dbError);
       }
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) { // Use 'any' to avoid TypeScript errors
+    console.error("Gemini API Error:", error);
+
+    // Get the message safely
+    const errorMessage = error?.message || "";
+
+    if (errorMessage.includes("429")) {
+      setResponse("Rate limit exceeded. Please wait 60 seconds.");
+    } else if (errorMessage.includes("404")) {
+      setResponse("Model not found. Please ensure you used 'gemini-1.5-flash'.");
+    } else {
       setResponse("Oops! Something went wrong. Check your API key.");
-    } finally {
-      setIsLoading(false);
     }
+  } finally {
+    setIsLoading(false);
+  }
   };
 
   return (
