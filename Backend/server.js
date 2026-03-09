@@ -9,7 +9,9 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 // This allows ANY Vercel deployment to access your history
 app.use(cors({
-  origin: ["https://chatbot-ai-silk-ten.vercel.app", "https://mychatbotv1.vercel.app"]
+  origin: ["https://chatbot-ai-silk-ten.vercel.app", "https://mychatbotv1.vercel.app"],
+  methods: ["GET", "POST", "DELETE"],
+  credentials: true
 }));
 app.use(express.json()); 
 
@@ -46,21 +48,14 @@ app.post('/api/save-prompt', async (req, res) => {
 // Route: Get history for a specific user
 app.get('/api/history', async (req, res) => {
   try {
-    // Correctly extract userId from the query string (?userId=...)
-    const { userId } = req.query; 
+    const { userId } = req.query; // Extracts ?userId=... from the URL
+    if (!userId) return res.status(400).json({ error: "User ID is required" });
 
-    if (!userId) {
-      return res.status(400).json({ success: false, message: 'Missing userId' });
-    }
-
-    // Find ONLY the prompts belonging to this user
-    const history = await Prompt.find({ userId }).sort({ createdAt: -1 });
-    res.json(history);
+    const userHistory = await Chat.find({ userId }).sort({ createdAt: -1 });
+    res.json(userHistory);
   } catch (error) {
-    console.error("Fetch History Error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  } 
-  
+    res.status(500).json({ error: "Server error fetching history" });
+  }
 });
 // Route: Delete all history for a specific user
 app.delete('/api/history/:userId', async (req, res) => {
