@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-  origin: "https://mychatbotv1.vercel.app" // Use your actual Vercel link
+  origin: "https://chatbot-ai-silk-ten.vercel.app/" // Use your actual Vercel link
 }));
 app.use(express.json()); 
 
