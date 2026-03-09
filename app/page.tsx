@@ -103,7 +103,7 @@ export default function Home() {
       setResponse(text);
 
       try {
-        await fetch("${API_BASE_URL}/api/save-prompt", {
+        await fetch(`${API_BASE_URL}/api/save-prompt`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
