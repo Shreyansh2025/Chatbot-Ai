@@ -7,8 +7,9 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
+// This allows ANY Vercel deployment to access your history
 app.use(cors({
-  origin: "https://chatbot-ai-silk-ten.vercel.app/" // Use your actual Vercel link
+  origin: ["https://chatbot-ai-silk-ten.vercel.app", "https://mychatbotv1.vercel.app"]
 }));
 app.use(express.json()); 
 
