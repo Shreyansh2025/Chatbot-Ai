@@ -12,6 +12,7 @@ import Hero3D from "./Hero3D";
 import { useUser, SignInButton, UserButton } from "@clerk/nextjs";
 import { InfoModal } from "./InfoModel";
 
+const API_BASE_URL = "https://chatbot-ai-2kjk.onrender.com";
 export default function Home() {
   const { isSignedIn, isLoaded, user } = useUser();
   const [prompt, setPrompt] = useState("");
@@ -27,7 +28,7 @@ export default function Home() {
     setIsHistoryLoading(true);
     try {
       const res = await fetch(
-        `https://chatbot-ai-2kjk.onrender.com/api/history?userId=${user.id}`,
+        `${API_BASE_URL}/api/history?userId=${user.id}`,
       );
       const data = await res.json();
       setHistory(data);
@@ -43,7 +44,7 @@ export default function Home() {
       return;
 
     try {
-      await fetch(`http://localhost:5000/api/history/${user.id}`, {
+      await fetch(`${API_BASE_URL}/api/history/${user.id}`, {
         method: "DELETE",
       });
       setHistory([]);
@@ -58,7 +59,7 @@ export default function Home() {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/history/chat/${chatId}`,
+        `${API_BASE_URL}/api/history/chat/${chatId}`,
         {
           method: "DELETE",
         },
@@ -102,7 +103,7 @@ export default function Home() {
       setResponse(text);
 
       try {
-        await fetch("http://localhost:5000/api/save-prompt", {
+        await fetch("${API_BASE_URL}/api/save-prompt", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
