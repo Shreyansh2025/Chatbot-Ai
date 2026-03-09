@@ -74,7 +74,7 @@ function NeuralSphere() {
 
       {/* Neural network lines */}
       <Line
-        points={connections}
+        points={connections as any}
         color="#3b82f6"
         lineWidth={1}
         transparent
