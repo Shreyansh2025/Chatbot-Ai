@@ -45,9 +45,6 @@ app.post('/api/save-prompt', async (req, res) => {
   }
 });
 
-// Route: Get history for a specific user
-// Make sure your Model is imported!
-// const Chat = require("./models/Chat"); // or wherever your schema is
 
 // Route: Get history for a specific user
 app.get('/api/history', async (req, res) => {
