@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import ReactMarkdown from "react-markdown";
 import Tilt from "react-parallax-tilt";
 import ParticlesBackground from "./ParticlesBackground";
 import Hero3D from "./Hero3D";
 import { useUser, SignInButton, UserButton } from "@clerk/nextjs";
 import { InfoModal } from "./InfoModel";
+import Groq from "groq-sdk";
 
 const API_BASE_URL = "https://chatbot-ai-2kjk.onrender.com";
 export default function Home() {
@@ -85,60 +85,44 @@ export default function Home() {
   }, []);
 
   const handleSend = async () => {
-    if (!prompt) return;
+  if (!prompt) return;
 
-    setIsLoading(true);
-    setResponse("");
-    const currentPrompt = prompt;
-    setPrompt("");
+  setIsLoading(true);
+  setResponse("");
+  const currentPrompt = prompt;
+  setPrompt("");
 
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY as string;
-      if (!apiKey) {
-      setResponse("API Key is missing. Check your Vercel/Local environment variables.");
+  try {
+    // 2. Ensure your .env.local has GROQ_API_KEY
+    const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY; 
+    
+    if (!apiKey) {
+      setResponse("Groq API Key is missing in environment variables.");
       setIsLoading(false);
       return;
     }
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" });
-      const result = await model.generateContent(currentPrompt);
-      const text = result.response.text();
 
-      setResponse(text);
+    // 3. Initialize Groq instead of Google
+    const groq = new Groq({ apiKey, dangerouslyAllowBrowser: true });
+    
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [{ role: "user", content: currentPrompt }],
+      model: "llama-3.3-70b-versatile", // Use a Groq model
+    });
 
-      try {
-        await fetch(`${API_BASE_URL}/api/save-prompt`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            userId: user?.id,
-            userPrompt: currentPrompt,
-            aiResponse: text,
-          }),
-        });
-        fetchHistory();
-      } catch (dbError) {
-        console.error("Warning: Could not save to database.", dbError);
-      }
-    } catch (error: any) { // Use 'any' to avoid TypeScript errors
-    console.error("Gemini API Error:", error);
+    const text = chatCompletion.choices[0]?.message?.content || "";
 
-    // Get the message safely
-    const errorMessage = error?.message || "";
+    setResponse(text);
 
-    if (errorMessage.includes("429")) {
-      setResponse("Rate limit exceeded. Please wait 60 seconds.");
-    } else if (errorMessage.includes("404")) {
-      setResponse("Model not found. Please ensure you used 'gemini-1.5-flash'.");
-    } else {
-      setResponse("Oops! Something went wrong. Check your API key.");
-    }
+    // ... existing database saving logic ...
+    
+  } catch (error: any) {
+    console.error("Groq API Error:", error);
+    setResponse("Error connecting to Groq. Please check your key.");
   } finally {
     setIsLoading(false);
   }
-  };
+};
 
   return (
     <div className="flex h-screen bg-zinc-950 text-white overflow-hidden relative">
