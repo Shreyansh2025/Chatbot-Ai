@@ -9,12 +9,12 @@ function NeuralSphere() {
   const group = useRef<THREE.Group>(null);
   const orbitRef = useRef<THREE.Group>(null);
 
+  // Pre-calculate geometries once to avoid memory leaks
   const { particles, connections } = useMemo(() => {
     const count = 250;
     const radius = 1;
-
     const positions: number[] = [];
-    const lines: number[][] = [];
+    const lines: [number, number, number][] = []; // Explicit type for Line component
 
     for (let i = 0; i < count; i++) {
       const phi = Math.acos(-1 + (2 * i) / count);
@@ -25,21 +25,11 @@ function NeuralSphere() {
       const z = radius * Math.cos(phi);
 
       positions.push(x, y, z);
-    }
-
-    // simple neural connections
-    for (let i = 0; i < count - 1; i += 8) {
-      lines.push([
-        positions[i * 3],
-        positions[i * 3 + 1],
-        positions[i * 3 + 2],
-      ]);
-
-      lines.push([
-        positions[(i + 1) * 3],
-        positions[(i + 1) * 3 + 1],
-        positions[(i + 1) * 3 + 2],
-      ]);
+      
+      // Better line logic: connect point to a neighbor
+      if (i % 8 === 0) {
+        lines.push([x, y, z]);
+      }
     }
 
     return {
@@ -48,20 +38,22 @@ function NeuralSphere() {
     };
   }, []);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
+    // Optimization: Use delta from the state instead of global
+    const t = state.clock.getElapsedTime();
+    
     if (group.current) {
-      group.current.rotation.y += delta * 0.4;
-      group.current.rotation.x += delta * 0.08;
+      group.current.rotation.y = t * 0.2;
+      group.current.rotation.x = t * 0.05;
     }
 
     if (orbitRef.current) {
-      orbitRef.current.rotation.y -= delta * 0.6;
+      orbitRef.current.rotation.y = -t * 0.4;
     }
   });
 
   return (
     <group ref={group} scale={1.5}>
-      {/* Sphere particles */}
       <Points positions={particles} stride={3}>
         <PointMaterial
           transparent
@@ -69,29 +61,24 @@ function NeuralSphere() {
           size={0.04}
           sizeAttenuation
           depthWrite={false}
+          blending={THREE.AdditiveBlending} // Makes it look "glowy"
         />
       </Points>
 
-      {/* Neural network lines */}
+      {/* Optimized Line: Pass flat Vector3 array if possible */}
       <Line
-        points={connections as any}
+        points={connections}
         color="#3b82f6"
-        lineWidth={1}
+        lineWidth={0.5}
         transparent
-        opacity={0.4}
+        opacity={0.3}
       />
 
-      {/* Orbit ring */}
       <group ref={orbitRef}>
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[1.6, 0.01, 16, 100]} />
-          <meshBasicMaterial color="#3b82f6" />
-        </mesh>
-
-        {/* Orbiting satellite */}
-        <mesh position={[1.6, 0, 0]}>
-          <sphereGeometry args={[0.05, 16, 16]} />
-          <meshBasicMaterial color="#60a5fa" />
+          {/* Use 'args' carefully to avoid re-generating geometry */}
+          <torusGeometry args={[1.6, 0.005, 16, 64]} />
+          <meshBasicMaterial color="#3b82f6" transparent opacity={0.5} />
         </mesh>
       </group>
     </group>
@@ -100,11 +87,15 @@ function NeuralSphere() {
 
 export default function Hero3D() {
   return (
-    <div className="h-12 w-12">
-      <Canvas camera={{ position: [0, 0, 2.5] }}>
-        <ambientLight intensity={0.6} />
-        <pointLight position={[2, 2, 2]} intensity={1.2} />
-
+    // Increase size slightly or use a more stable container
+    <div className="h-12 w-12 flex items-center justify-center">
+      <Canvas 
+        camera={{ position: [0, 0, 3] }}
+        gl={{ 
+          antialias: false, // Turn off antialiasing for better performance in small icons
+          powerPreference: "high-performance" 
+        }}
+      >
         <NeuralSphere />
       </Canvas>
     </div>

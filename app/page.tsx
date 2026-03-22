@@ -13,6 +13,7 @@ import { InfoModal } from "./InfoModel";
 import Groq from "groq-sdk";
 
 const API_BASE_URL = "https://chatbot-ai-2kjk.onrender.com";
+
 export default function Home() {
   const { isSignedIn, isLoaded, user } = useUser();
   const [prompt, setPrompt] = useState("");
@@ -20,16 +21,18 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const fetchHistory = async () => {
     if (!user?.id) return;
     setIsHistoryLoading(true);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/history?userId=${user.id}`,
-      );
+      const res = await fetch(`${API_BASE_URL}/api/history?userId=${user.id}`);
+      // FIX #10: check res.ok before calling res.json() to avoid parsing error HTML as JSON
+      if (!res.ok) {
+        console.error("History fetch failed with status:", res.status);
+        return;
+      }
       const data = await res.json();
       setHistory(data);
     } catch (error) {
@@ -48,81 +51,95 @@ export default function Home() {
         method: "DELETE",
       });
       setHistory([]);
-      setResponse(""); // Clear current display
+      setResponse("");
     } catch (error) {
       console.error("Failed to clear history", error);
     }
   };
+
   const deleteSingleChat = async (e: React.MouseEvent, chatId: string) => {
-    e.stopPropagation(); // 👈 Prevents the chat from "opening" when you click delete
+    e.stopPropagation();
     if (!confirm("Delete this chat?")) return;
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/history/chat/${chatId}`,
-        {
-          method: "DELETE",
-        },
-      );
+      const res = await fetch(`${API_BASE_URL}/api/history/chat/${chatId}`, {
+        method: "DELETE",
+      });
       if (res.ok) {
-        fetchHistory(); // Refresh the list
+        fetchHistory();
       }
     } catch (error) {
       console.error("Error deleting chat:", error);
     }
   };
 
+  // FIX #9: added user?.id to the dependency array so history re-fetches
+  // if the user object loads after isSignedIn becomes true
   useEffect(() => {
-    if (isSignedIn) {
+    if (isSignedIn && user?.id) {
       fetchHistory();
     }
-  }, [isSignedIn]);
+  }, [isSignedIn, user?.id]);
 
+  // FIX #8: guard window access so it doesn't throw during SSR
   useEffect(() => {
-    if (window.innerWidth < 768) {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
       setIsSidebarOpen(false);
     }
   }, []);
 
   const handleSend = async () => {
-  if (!prompt) return;
+    if (!prompt) return;
 
-  setIsLoading(true);
-  setResponse("");
-  const currentPrompt = prompt;
-  setPrompt("");
+    setIsLoading(true);
+    setResponse("");
+    const currentPrompt = prompt;
+    setPrompt("");
 
-  try {
-    // 2. Ensure your .env.local has GROQ_API_KEY
-    const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY; 
-    
-    if (!apiKey) {
-      setResponse("Groq API Key is missing in environment variables.");
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
+
+      if (!apiKey) {
+        setResponse("Groq API Key is missing in environment variables.");
+        setIsLoading(false);
+        return;
+      }
+
+      const groq = new Groq({ apiKey, dangerouslyAllowBrowser: true });
+
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [{ role: "user", content: currentPrompt }],
+        model: "llama-3.3-70b-versatile",
+      });
+
+      const text = chatCompletion.choices[0]?.message?.content || "";
+      setResponse(text);
+
+      // FIX #6: actually save the prompt to the database and refresh history
+      // (previously this was just a placeholder comment "// ... existing database saving logic ...")
+      try {
+        await fetch(`${API_BASE_URL}/api/save-prompt`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId: user?.id,
+            userPrompt: currentPrompt,
+            aiResponse: text,
+          }),
+        });
+        fetchHistory();
+      } catch (dbError) {
+        console.error("Warning: Could not save to database.", dbError);
+      }
+    } catch (error: any) {
+      console.error("Groq API Error:", error);
+      setResponse("Error connecting to Groq. Please check your key.");
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    // 3. Initialize Groq instead of Google
-    const groq = new Groq({ apiKey, dangerouslyAllowBrowser: true });
-    
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [{ role: "user", content: currentPrompt }],
-      model: "llama-3.3-70b-versatile", // Use a Groq model
-    });
-
-    const text = chatCompletion.choices[0]?.message?.content || "";
-
-    setResponse(text);
-
-    // ... existing database saving logic ...
-    
-  } catch (error: any) {
-    console.error("Groq API Error:", error);
-    setResponse("Error connecting to Groq. Please check your key.");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   return (
     <div className="flex h-screen bg-zinc-950 text-white overflow-hidden relative">
@@ -180,21 +197,25 @@ export default function Home() {
                   Recent Chats
                 </h3>
                 <div className="flex flex-col gap-2">
-                  {/* --- LOADING SPINNER LOGIC --- */}
                   {isHistoryLoading ? (
                     <div className="flex flex-col items-center gap-2 mt-4">
                       <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                      <p className="text-xs text-zinc-500">
-                        Loading history...
-                      </p>
+                      <p className="text-xs text-zinc-500">Loading history...</p>
                     </div>
                   ) : Array.isArray(history) && history.length > 0 ? (
-                    history.map((chat, index) => (
+                    // FIX #7: use chat._id as key instead of index to avoid React mis-matching
+                    // state with the wrong element when items are deleted or reordered
+                    history.map((chat) => (
                       <div
-                        key={index}
+                        key={chat._id}
                         onClick={() => {
                           setResponse(chat.aiResponse);
-                          if (window.innerWidth < 768) setIsSidebarOpen(false);
+                          // FIX #8: guard window access
+                          if (
+                            typeof window !== "undefined" &&
+                            window.innerWidth < 768
+                          )
+                            setIsSidebarOpen(false);
                         }}
                         className="group flex flex-row items-center justify-between gap-2 p-3 rounded-xl hover:bg-zinc-800/60 cursor-pointer transition-all border border-transparent hover:border-zinc-700"
                       >
@@ -233,7 +254,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* --- CLEAR HISTORY BUTTON --- */}
               <div className="p-4 border-t border-zinc-800">
                 <Button
                   onClick={clearHistory}
@@ -270,13 +290,7 @@ export default function Home() {
         </>
       )}
 
-      {/* ... Rest of your Navbar and Main chat area remain the same ... */}
-
-      {/* ========================================== */}
-      {/* 2. RIGHT CONTENT AREA (Navbar + Chat)      */}
-      {/* ========================================== */}
       <div className="flex-1 relative flex flex-col h-full overflow-hidden transition-all duration-300">
-        {/* DYNAMIC NAVBAR */}
         <nav
           className={`absolute top-6 left-1/2 -translate-x-1/2 
           flex items-center py-3 px-8
@@ -291,10 +305,8 @@ export default function Home() {
               : "w-[90%] max-w-6xl justify-between"
           }`}
         >
-          {/* FIX: Wrapped the Button and Logo in a single group so they stay together! */}
           {(!isSignedIn || !isSidebarOpen) && (
             <div className="flex items-center gap-2 md:gap-4">
-              {/* Toggle Button */}
               {isSignedIn && !isSidebarOpen && (
                 <button
                   onClick={() => setIsSidebarOpen(true)}
@@ -319,7 +331,6 @@ export default function Home() {
                 </button>
               )}
 
-              {/* Logo */}
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-tight">
                   Hackathon<span className="text-blue-500">AI</span>
@@ -329,18 +340,17 @@ export default function Home() {
             </div>
           )}
 
-          {/* Links */}
           <div className="hidden md:flex items-center gap-8 text-sm text-zinc-300">
-            {/* FEATURES */}
             <InfoModal title="Core Features" triggerText="Features">
               <div className="space-y-4">
                 <section>
                   <h4 className="font-bold text-white">
-                    🚀 Gemini 2.5 Intelligence
+                    🚀 Groq LLaMA Intelligence
                   </h4>
                   <p>
-                    Harnessing the power of Google's latest model for code
-                    debugging, creative writing, and technical analysis.
+                    Harnessing the power of Meta's LLaMA 3.3 70B via Groq for
+                    blazing-fast code debugging, creative writing, and technical
+                    analysis.
                   </p>
                 </section>
                 <section>
@@ -362,12 +372,11 @@ export default function Home() {
               </div>
             </InfoModal>
 
-            {/* DOCS */}
             <InfoModal title="Documentation" triggerText="Docs">
               <div className="space-y-4">
                 <div className="bg-zinc-950 p-4 rounded-lg border border-zinc-800">
                   <p className="text-sm font-mono text-blue-400">
-                    Stack: MERN + Next.js + Gemini API
+                    Stack: MERN + Next.js + Groq API
                   </p>
                 </div>
                 <p>
@@ -386,7 +395,6 @@ export default function Home() {
               </div>
             </InfoModal>
 
-            {/* ABOUT */}
             <InfoModal title="About the Project" triggerText="About">
               <p>
                 HackathonAI was developed by <strong>Shreyansh</strong>, a
@@ -430,7 +438,6 @@ export default function Home() {
             </InfoModal>
           </div>
 
-          {/* Auth */}
           <div className="flex items-center min-h-[40px]">
             {!isLoaded ? null : isSignedIn ? (
               <UserButton />
@@ -444,7 +451,6 @@ export default function Home() {
           </div>
         </nav>
 
-        {/* MAIN SCROLLABLE CHAT AREA */}
         <main className="flex-1 overflow-y-auto relative z-10 flex flex-col items-center pt-32 md:pt-40 p-8 w-full">
           <div className="flex flex-col items-center w-full max-w-3xl mx-auto">
             {!isSignedIn && isLoaded && (

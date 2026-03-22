@@ -24,14 +24,28 @@ export default function ParticlesBackground() {
       className="absolute inset-0 pointer-events-none"
       options={{
         background: { color: { value: "transparent" } },
-        fpsLimit: 120,
+        fpsLimit: 60,
+        interactivity: {
+    events: {
+      onHover: {
+        enable: true,
+        mode: "repulse", // 👈 Particles move away from cursor
+      },
+    },
+    modes: {
+      repulse: {
+        distance: 100,
+        duration: 0.4,
+      },
+    },
+  },
         particles: {
           color: { value: "#3b82f6" }, // Hackathon Blue dots
           links: { 
             color: "#ffffff", 
             distance: 150, // Draw lines if dots are within 150px of each other
             enable: true, 
-            opacity: 0.15, 
+            opacity: 0.1, 
             width: 1 
           },
           move: { 
@@ -42,13 +56,13 @@ export default function ParticlesBackground() {
           },
           number: { 
             density: { enable: true, width: 800, height: 800 }, 
-            value: 60 // Number of dots on screen
+            value: 50 // Number of dots on screen
           },
           opacity: { value: 0.4 },
           shape: { type: "circle" },
           size: { value: { min: 1, max: 3 } },
         },
-        detectRetina: true,
+        detectRetina: false,
       }}
     />
   );
