@@ -22,6 +22,7 @@ mongoose.connect(process.env.MONGO_URI)
 // Blueprint for saving AI Prompts
 const promptSchema = new mongoose.Schema({
   userId: String,
+  title: String,  
   userPrompt: String,
   aiResponse: String,
   createdAt: { type: Date, default: Date.now }
@@ -34,7 +35,7 @@ const Prompt = mongoose.model('Prompt', promptSchema);
 // ─────────────────────────────────────────
 app.post('/api/save-prompt', async (req, res) => {
   try {
-    const { userId, userPrompt, aiResponse } = req.body;
+    const { userId, userPrompt, aiResponse, title } = req.body; 
 
     // FIX: guard against missing userId so we don't save corrupted documents
     if (!userId) {
@@ -43,7 +44,7 @@ app.post('/api/save-prompt', async (req, res) => {
 
     console.log("Saving for User:", userId);
 
-    const newEntry = new Prompt({ userId, userPrompt, aiResponse });
+    const newEntry = new Prompt({ userId, title ,userPrompt, aiResponse });
     await newEntry.save();
     res.json({ success: true });
   } catch (error) {
