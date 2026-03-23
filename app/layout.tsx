@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs"; // 1. Added Clerk import
 import "./globals.css";
+import { Inter } from 'next/font/google';
 
+const inter = Inter({ subsets: ['latin'] });
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -25,11 +27,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // 2. Wrapped the entire HTML inside the ClerkProvider
     <ClerkProvider>
       <html lang="en">
+        {/* Combine all fonts into one body tag and remove the duplicate body */}
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+          className={`${geistSans.variable} ${geistMono.variable} ${inter.className} antialiased`}
         >
           {children}
         </body>

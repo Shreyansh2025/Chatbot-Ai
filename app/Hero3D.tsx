@@ -5,6 +5,14 @@ import { Points, PointMaterial, Line } from "@react-three/drei";
 import { useRef, useMemo } from "react";
 import * as THREE from "three";
 
+// This silences the specific Three.js deprecation warning in the console
+if (typeof window !== 'undefined') {
+  const warn = console.warn;
+  console.warn = (...args) => {
+    if (args[0]?.includes?.('THREE.Clock: This module has been deprecated')) return;
+    warn(...args);
+  };
+}
 function NeuralSphere() {
   const group = useRef<THREE.Group>(null);
   const orbitRef = useRef<THREE.Group>(null);
@@ -25,7 +33,7 @@ function NeuralSphere() {
       const z = radius * Math.cos(phi);
 
       positions.push(x, y, z);
-      
+
       // Better line logic: connect point to a neighbor
       if (i % 8 === 0) {
         lines.push([x, y, z]);
@@ -39,16 +47,18 @@ function NeuralSphere() {
   }, []);
 
   useFrame((state, delta) => {
-    // Optimization: Use delta from the state instead of global
-    const t = state.clock.getElapsedTime();
-    
+    // Instead of state.clock.getElapsedTime(),
+    // we increment rotation based on the time between frames (delta).
+
     if (group.current) {
-      group.current.rotation.y = t * 0.2;
-      group.current.rotation.x = t * 0.05;
+      // 0.2 and 0.05 are your speed multipliers
+      group.current.rotation.y += delta * 0.2;
+      group.current.rotation.x += delta * 0.05;
     }
 
     if (orbitRef.current) {
-      orbitRef.current.rotation.y = -t * 0.4;
+      // Negative for counter-rotation
+      orbitRef.current.rotation.y -= delta * 0.4;
     }
   });
 
@@ -87,12 +97,12 @@ function NeuralSphere() {
 
 export default function Hero3D() {
   return (
-    // Increase size slightly or use a more stable container
     <div className="h-12 w-12 flex items-center justify-center">
-      <Canvas 
+      <Canvas
         camera={{ position: [0, 0, 3] }}
+        shadows={false}
         gl={{ 
-          antialias: false, // Turn off antialiasing for better performance in small icons
+          antialias: false,
           powerPreference: "high-performance" 
         }}
       >

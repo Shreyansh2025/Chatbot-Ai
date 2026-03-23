@@ -2,27 +2,49 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: ["https://chatbot-ai-silk-ten.vercel.app", "http://localhost:3000", "https://mychatbotv1.vercel.app"],
+  origin: [
+    "https://chatbot-ai-silk-ten.vercel.app",
+    "http://localhost:3000",
+    "https://mychatbotv1.vercel.app"
+  ],
   methods: ["GET", "POST", "DELETE", "PUT"],
   credentials: true
 }));
 app.use(express.json());
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI)
+// ─── Rate limiting — prevent API spam ────────────────────────────────────────
+const saveLimiter = rateLimit({
+  windowMs: 60 * 1000,  // 1 minute
+  max: 30,              // max 30 saves per minute per IP
+  message: { success: false, message: "Too many requests. Please slow down." }
+});
+
+// ─── MongoDB connection ───────────────────────────────────────────────────────
+mongoose.connect(process.env.MONGO_URI, {
+  maxPoolSize: 10,       // connection pooling — reuses connections
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+})
   .then(() => console.log('🟢 Connected to MongoDB Successfully!'))
   .catch((err) => console.log('🔴 Database connection error:', err));
 
-// Blueprint for saving AI Prompts
+// reconnect on disconnect
+mongoose.connection.on('disconnected', () => {
+  console.log('🟡 MongoDB disconnected. Attempting reconnect...');
+  mongoose.connect(process.env.MONGO_URI);
+});
+
+// ─── Schema ───────────────────────────────────────────────────────────────────
 const promptSchema = new mongoose.Schema({
   userId: String,
-  title: String,  
+  title: String,
   userPrompt: String,
   aiResponse: String,
   createdAt: { type: Date, default: Date.now }
@@ -30,32 +52,27 @@ const promptSchema = new mongoose.Schema({
 
 const Prompt = mongoose.model('Prompt', promptSchema);
 
-// ─────────────────────────────────────────
-// Route: Save a new prompt
-// ─────────────────────────────────────────
-app.post('/api/save-prompt', async (req, res) => {
+// ─── Route: Save a new prompt ─────────────────────────────────────────────────
+app.post('/api/save-prompt', saveLimiter, async (req, res) => {
   try {
-    const { userId, userPrompt, aiResponse, title } = req.body; 
+    const { userId, userPrompt, aiResponse, title } = req.body;
 
-    // FIX: guard against missing userId so we don't save corrupted documents
     if (!userId) {
       return res.status(400).json({ success: false, message: 'userId is required.' });
     }
 
-    console.log("Saving for User:", userId);
-
-    const newEntry = new Prompt({ userId, title ,userPrompt, aiResponse });
+    const newEntry = new Prompt({ userId, title, userPrompt, aiResponse });
     await newEntry.save();
-    res.json({ success: true });
+
+    // FIX: return _id so frontend can use it for instant sidebar update + delete
+    res.json({ success: true, _id: newEntry._id });
   } catch (error) {
     console.error("Database Save Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// ─────────────────────────────────────────
-// Route: Get history for a specific user
-// ─────────────────────────────────────────
+// ─── Route: Get history for a user ───────────────────────────────────────────
 app.get('/api/history', async (req, res) => {
   try {
     const { userId } = req.query;
@@ -72,16 +89,11 @@ app.get('/api/history', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────
-// Route: Delete ONE specific chat message
-// NOTE: This MUST come before /api/history/:userId
-// so Express matches the specific route first.
-// ─────────────────────────────────────────
+// ─── Route: Delete ONE chat — must be BEFORE /:userId ────────────────────────
 app.delete('/api/history/chat/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // FIX: validate ObjectId before querying to avoid a Mongoose CastError 500
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid chat ID.' });
     }
@@ -94,10 +106,7 @@ app.delete('/api/history/chat/:id', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────
-// Route: Delete ALL history for a specific user
-// NOTE: This comes AFTER /api/history/chat/:id
-// ─────────────────────────────────────────
+// ─── Route: Delete ALL history for a user ────────────────────────────────────
 app.delete('/api/history/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -114,6 +123,11 @@ app.delete('/api/history/:userId', async (req, res) => {
   }
 });
 
+// ─── Health check ─────────────────────────────────────────────────────────────
+app.get('/ping', (req, res) => {
+  res.json({ status: 'alive', timestamp: new Date().toISOString() });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Backend Server is live and listening on port ${PORT}`);
+  console.log(`🚀 Backend Server is live on port ${PORT}`);
 });
